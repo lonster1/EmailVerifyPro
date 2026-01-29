@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
@@ -20,10 +20,20 @@ export function BulkVerificationProgress({
   const [progress, setProgress] = useState(0);
   const [processedCount, setProcessedCount] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
-  const [status, setStatus] = useState('Waiting...');
+  const [status, setStatus] = useState('Queued...');
   const [retryCount, setRetryCount] = useState(0);
+  const [isQueued, setIsQueued] = useState(false);
+  const completedRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+  const onErrorRef = useRef(onError);
+
+  // Keep refs updated
+  onCompleteRef.current = onComplete;
+  onErrorRef.current = onError;
 
   const pollStatus = useCallback(async () => {
+    if (completedRef.current) return;
+
     try {
       const response = await fetch(`/api/verify/bulk/${taskId}`, {
         credentials: 'include',
@@ -33,44 +43,55 @@ export function BulkVerificationProgress({
 
       if (!response.ok) {
         if (response.status === 404) {
-          onError('Verification task not found. Please start a new verification.');
-        } else {
-          throw new Error(data.error || 'Failed to get verification status');
+          onErrorRef.current('Verification task not found. Please start a new verification.');
+          return;
         }
-        return;
+        throw new Error(data.error || 'Failed to get verification status');
       }
 
+      setRetryCount(0); // Reset on any successful response
+
       if (data.status === 'running') {
-        setProgress(data.progress || 0);
+        const p = data.progress || 0;
+        setProgress(p);
         setProcessedCount(data.processedCount || 0);
-        setStatus('Processing...');
-        setRetryCount(0); // Reset retry count on successful poll
+        if (p === 0) {
+          setIsQueued(true);
+          setStatus('Queued - waiting for processing...');
+        } else {
+          setIsQueued(false);
+          setStatus('Processing...');
+        }
       } else if (data.status === 'completed') {
+        completedRef.current = true;
         setProgress(100);
         setProcessedCount(totalEmails);
         setStatus('Completed');
-        onComplete(data.results, data.creditsConsumed, data.newBalance);
+        setIsQueued(false);
+        onCompleteRef.current(data.results, data.creditsConsumed, data.newBalance);
       }
     } catch (error) {
       console.error('Polling error:', error);
-      // Exponential backoff: 1s, 2s, 5s, 10s
-      const backoffDelays = [1000, 2000, 5000, 10000];
-      if (retryCount < backoffDelays.length) {
-        setRetryCount(retryCount + 1);
-      } else {
-        onError('Verification is taking longer than expected. Please try again later.');
-      }
+      setRetryCount(prev => {
+        if (prev >= 10) {
+          onErrorRef.current('Unable to reach verification service. Please check your verification history for results.');
+          return prev;
+        }
+        return prev + 1;
+      });
     }
-  }, [taskId, totalEmails, onComplete, onError, retryCount]);
+  }, [taskId, totalEmails]);
 
-  // Poll for status updates every 2 seconds
+  // Poll for status updates - slower interval when queued
   useEffect(() => {
-    const pollInterval = setInterval(pollStatus, 2000);
-    // Initial poll
-    pollStatus();
+    if (completedRef.current) return;
+
+    const interval = isQueued ? 5000 : 2000; // Poll less frequently when queued
+    const pollInterval = setInterval(pollStatus, interval);
+    pollStatus(); // Initial poll
 
     return () => clearInterval(pollInterval);
-  }, [pollStatus]);
+  }, [pollStatus, isQueued]);
 
   // Update elapsed time every second
   useEffect(() => {
@@ -82,14 +103,7 @@ export function BulkVerificationProgress({
     return () => clearInterval(timerInterval);
   }, []);
 
-  // Timeout after 5 minutes
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      onError('Verification timeout. Please check back later or contact support.');
-    }, 5 * 60 * 1000);
-
-    return () => clearTimeout(timeout);
-  }, [onError]);
+  // No hard timeout - let it run until completion or network failure
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -135,10 +149,20 @@ export function BulkVerificationProgress({
         </div>
       </div>
 
-      {retryCount > 0 && (
+      {isQueued && elapsedTime > 30 && (
         <Alert>
           <AlertDescription>
-            Experiencing connection issues. Retrying... (Attempt {retryCount}/4)
+            Your verification is queued with the email verification provider.
+            This can happen when multiple tasks are submitted. You can safely
+            close this page and check your results later in your verification history.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {retryCount > 0 && retryCount < 10 && (
+        <Alert>
+          <AlertDescription>
+            Experiencing connection issues. Retrying... (Attempt {retryCount}/10)
           </AlertDescription>
         </Alert>
       )}
