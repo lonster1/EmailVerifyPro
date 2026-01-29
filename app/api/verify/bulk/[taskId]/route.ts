@@ -5,6 +5,7 @@ import { getBulkVerificationResults, normalizeReoonResponse } from '@/lib/reoon'
 
 // Force dynamic rendering - don't pre-render during build
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60; // Allow up to 60 seconds for bulk verification polling
 
 export async function GET(
   request: NextRequest,
@@ -81,9 +82,11 @@ export async function GET(
     // Poll Reoon API for results
     let reoonResults;
     try {
+      console.log(`[BULK] Polling Reoon for task ${taskId}, verification ${verification.id}`);
       reoonResults = await getBulkVerificationResults(taskId);
-    } catch (error) {
-      console.error('Reoon API error:', error);
+      console.log(`[BULK] Reoon response: status=${reoonResults.status}, progress=${reoonResults.progress}, hasResults=${!!reoonResults.results}`);
+    } catch (error: any) {
+      console.error('[BULK] Reoon API error:', error?.message || error);
       return NextResponse.json(
         { error: 'Failed to get verification results' },
         { status: 500 }
@@ -120,6 +123,7 @@ export async function GET(
     }
 
     // Task completed - process results
+    console.log(`[BULK] Task ${taskId} completed! Processing results...`);
     const rawResults = reoonResults.results
       ? Object.values(reoonResults.results)
       : [];
@@ -180,8 +184,8 @@ export async function GET(
       newBalance,
       processingTimeSeconds,
     });
-  } catch (error) {
-    console.error('Polling error:', error);
+  } catch (error: any) {
+    console.error('[BULK] Polling error:', error?.message || error, error?.stack);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

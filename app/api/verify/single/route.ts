@@ -5,6 +5,7 @@ import { getBalance, deductCredits } from '@/lib/credits';
 
 // Force dynamic rendering - don't pre-render during build
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 /**
  * POST /api/verify/single
