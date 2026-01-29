@@ -3,6 +3,9 @@ import { prisma } from '@/lib/prisma';
 import { verifySingleEmail } from '@/lib/reoon';
 import { getBalance, deductCredits } from '@/lib/credits';
 
+// Force dynamic rendering - don't pre-render during build
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/verify/single
  *

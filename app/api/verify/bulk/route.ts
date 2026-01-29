@@ -3,6 +3,9 @@ import { prisma } from '@/lib/prisma';
 import { hasSufficientCredits } from '@/lib/credits';
 import { createBulkVerificationTask } from '@/lib/reoon';
 
+// Force dynamic rendering - don't pre-render during build
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     // Get userId from middleware headers

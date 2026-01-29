@@ -3,6 +3,9 @@ import { prisma } from '@/lib/prisma';
 import { deductCredits } from '@/lib/credits';
 import { getBulkVerificationResults, normalizeReoonResponse } from '@/lib/reoon';
 
+// Force dynamic rendering - don't pre-render during build
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { taskId: string } }
