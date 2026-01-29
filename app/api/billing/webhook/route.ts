@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { addCredits } from '@/lib/credits';
 
+// Force dynamic rendering - don't pre-render during build
+export const dynamic = 'force-dynamic';
+
 // Initialize Stripe lazily to avoid build-time errors
 function getStripe() {
   if (!process.env.STRIPE_SECRET_KEY) {

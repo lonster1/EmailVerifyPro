@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { verifyToken, extractTokenFromHeader } from '@/lib/auth';
 
+// Force dynamic rendering - don't pre-render during build
+export const dynamic = 'force-dynamic';
+
 // Credit package definitions
 const PACKAGES: Record<string, { credits: number; price: number }> = {
   '10K': { credits: 10000, price: 1500 }, // $15.00 in cents
