@@ -23,7 +23,7 @@ export default function Home() {
               <p className="text-lg mb-8 opacity-80">
                 Protect your sender reputation without breaking the bank.
               </p>
-              <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex flex-col sm:flex-row gap-4 mb-4">
                 <Button size="lg" asChild>
                   <Link href="/register">
                     Start Free - 100 Credits
@@ -31,8 +31,6 @@ export default function Home() {
                 </Button>
                 <Button
                   size="lg"
-                  variant="outline"
-                  className="border-white text-white hover:bg-white/10"
                   asChild
                 >
                   <Link href="/pricing">
@@ -40,6 +38,12 @@ export default function Home() {
                   </Link>
                 </Button>
               </div>
+              <p className="text-white/80 text-sm">
+                Already have an account?{' '}
+                <Link href="/login" className="text-primary hover:text-primary/90 font-semibold underline">
+                  Sign In
+                </Link>
+              </p>
             </div>
 
             {/* Right Column - Dashboard Image */}
