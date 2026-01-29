@@ -1,0 +1,104 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                    String   @id @default(uuid())
+  email                 String   @unique
+  passwordHash          String
+  role                  String   @default("USER")  // USER or ADMIN
+  creditsBalance        Int      @default(100)
+  hasUnlimitedCredits   Boolean  @default(false)  // For personal/friend accounts
+  isVerified            Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  lastLoginAt           DateTime?
+
+  verifications   Verification[]
+  transactions    CreditTransaction[]
+  apiKeys         ApiKey[]
+
+  @@map("users")
+}
+
+model Verification {
+  id                    String    @id @default(uuid())
+  userId                String
+  type                  String    // SINGLE, BATCH, or BULK
+  filename              String?
+  totalCount            Int
+  validCount            Int       @default(0)
+  invalidCount          Int       @default(0)
+  riskyCount            Int       @default(0)
+  unknownCount          Int       @default(0)
+  catchallCount         Int       @default(0)
+  creditsConsumed       Int
+  status                String    // PENDING, PROCESSING, COMPLETED, or FAILED
+  resultsUrl            String?
+  resultsData           String?   // Store results as JSON string for MVP
+  errorMessage          String?
+  processingTimeSeconds Float?
+  createdAt             DateTime  @default(now())
+  completedAt           DateTime?
+  expiresAt             DateTime  // Auto-delete after 30 days
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("verifications")
+}
+
+model CreditTransaction {
+  id              String   @id @default(uuid())
+  userId          String
+  amount          Int      // Positive for purchase, negative for usage
+  type            String   // PURCHASE, USAGE, REFUND, or ADMIN_ADJUSTMENT
+  balanceAfter    Int
+  verificationId  String?
+  stripePaymentId String?
+  description     String
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("credit_transactions")
+}
+
+model ApiKey {
+  id         String    @id @default(uuid())
+  userId     String
+  name       String
+  keyHash    String    // Hashed API key
+  keyPrefix  String    // First 8-12 chars for display (e.g., "evp_live_abc123...")
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("api_keys")
+}
+
+model Subscription {
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  planId               String   // starter, growth, professional, enterprise
+  dailyCredits         Int
+  priceCents           Int
+  stripeSubscriptionId String?  @unique
+  status               String   // ACTIVE, CANCELED, PAST_DUE, or PAUSED
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@map("subscriptions")
+}

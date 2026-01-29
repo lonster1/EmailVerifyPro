@@ -1,0 +1,16 @@
+first_name,last_name,email,phone,company
+John,Doe,john.doe@gmail.com,555-1234,Acme Inc
+Jane,Smith,jane.smith@outlook.com,555-5678,Tech Corp
+Bob,Johnson,test@example.com,555-9999,Example LLC
+Alice,Williams,invalid@fake-domain-12345.com,555-1111,Bad Domain Co
+Charlie,Brown,admin@company.com,555-2222,Admin Services
+Diana,Martinez,support@business.org,555-3333,Support Inc
+Eve,Garcia,hello@tempmail.com,555-4444,Temp Mail Ltd
+Frank,Rodriguez,info@disposable.email,555-5555,Disposable Corp
+Grace,Wilson,user123@yahoo.com,555-6666,Yahoo User
+Henry,Anderson,contact@protonmail.com,555-7777,Proton LLC
+Isabel,Thomas,john.doe@gmail.com,555-8888,Duplicate Test
+Jack,Taylor,sales@marketing.io,555-9999,Marketing Pro
+Karen,Moore,webmaster@test.net,555-0000,Web Services
+Leo,Jackson,noreply@automated.com,555-1122,Automation Inc
+Maya,White,demo@testing.xyz,555-3344,Testing Corp

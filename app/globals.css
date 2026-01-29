@@ -1,0 +1,227 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Page backgrounds */
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+
+    /* Dark sections (alternating pattern) */
+    --section-dark: 222 47% 11%;
+    --section-dark-foreground: 0 0% 100%;
+
+    /* Cards */
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --card-dark: 0 0% 100%;
+    --card-dark-foreground: 222 47% 11%;
+
+    /* Popover */
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Primary accent (bright blue) */
+    --primary: 221 91% 66%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary/Muted */
+    --secondary: 215 20% 93%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 215 20% 96%;
+    --muted-foreground: 222 16% 46%;
+
+    /* Accent (light blue highlights) */
+    --accent: 212 100% 95%;
+    --accent-foreground: 221 91% 66%;
+
+    /* Borders */
+    --border: 215 20% 90%;
+    --input: 215 20% 90%;
+
+    /* Status colors (work on both backgrounds) */
+    --status-valid: 142 71% 45%;
+    --status-valid-bg: 142 71% 95%;
+    --status-valid-border: 142 71% 75%;
+
+    --status-invalid: 0 84% 60%;
+    --status-invalid-bg: 0 84% 95%;
+    --status-invalid-border: 0 84% 75%;
+
+    --status-risky: 45 93% 47%;
+    --status-risky-bg: 45 93% 95%;
+    --status-risky-border: 45 93% 75%;
+
+    --status-unknown: 215 16% 47%;
+    --status-unknown-bg: 215 16% 95%;
+    --status-unknown-border: 215 16% 75%;
+
+    --status-catchall: 217 91% 60%;
+    --status-catchall-bg: 217 91% 95%;
+    --status-catchall-border: 217 91% 75%;
+
+    /* Destructive */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --ring: 221 91% 66%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* Keep current dark mode but enhance navy background */
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+
+    /* Dark sections become even darker in dark mode */
+    --section-dark: 222 50% 8%;
+    --section-dark-foreground: 210 40% 98%;
+
+    /* Cards */
+    --card: 217 32% 17%;
+    --card-foreground: 210 40% 98%;
+    --card-dark: 217 32% 15%;
+    --card-dark-foreground: 210 40% 98%;
+
+    /* Popover */
+    --popover: 217 32% 17%;
+    --popover-foreground: 210 40% 98%;
+
+    /* Primary */
+    --primary: 221 91% 66%;
+    --primary-foreground: 222 47% 11%;
+
+    /* Secondary/Muted */
+    --secondary: 217 32% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 32% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    /* Accent */
+    --accent: 217 32% 17%;
+    --accent-foreground: 221 91% 66%;
+
+    /* Borders */
+    --border: 217 32% 27%;
+    --input: 217 32% 27%;
+
+    /* Status colors adjusted for dark mode */
+    --status-valid: 142 71% 50%;
+    --status-valid-bg: 142 40% 20%;
+    --status-valid-border: 142 40% 40%;
+
+    --status-invalid: 0 84% 65%;
+    --status-invalid-bg: 0 50% 20%;
+    --status-invalid-border: 0 50% 40%;
+
+    --status-risky: 45 93% 55%;
+    --status-risky-bg: 45 60% 20%;
+    --status-risky-border: 45 60% 40%;
+
+    --status-unknown: 215 16% 60%;
+    --status-unknown-bg: 215 10% 20%;
+    --status-unknown-border: 215 10% 40%;
+
+    --status-catchall: 217 91% 65%;
+    --status-catchall-bg: 217 50% 20%;
+    --status-catchall-border: 217 50% 40%;
+
+    /* Destructive */
+    --destructive: 0 84% 65%;
+    --destructive-foreground: 210 40% 98%;
+
+    --ring: 221 91% 66%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  /* Section background utilities */
+  .section-light {
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+
+  .section-dark {
+    background: hsl(var(--section-dark));
+    color: hsl(var(--section-dark-foreground));
+  }
+
+  /* Cards on dark sections need white background */
+  .section-dark .card,
+  .section-dark [class*="rounded-lg"][class*="border"] {
+    background: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Buttons on dark sections */
+  .section-dark .button-outline {
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  /* Status badge utilities (replace hard-coded colors) */
+  .badge-valid {
+    background: hsl(var(--status-valid-bg));
+    color: hsl(var(--status-valid));
+    border: 1px solid hsl(var(--status-valid-border));
+  }
+
+  .badge-invalid {
+    background: hsl(var(--status-invalid-bg));
+    color: hsl(var(--status-invalid));
+    border: 1px solid hsl(var(--status-invalid-border));
+  }
+
+  .badge-risky {
+    background: hsl(var(--status-risky-bg));
+    color: hsl(var(--status-risky));
+    border: 1px solid hsl(var(--status-risky-border));
+  }
+
+  .badge-unknown {
+    background: hsl(var(--status-unknown-bg));
+    color: hsl(var(--status-unknown));
+    border: 1px solid hsl(var(--status-unknown-border));
+  }
+
+  .badge-catchall {
+    background: hsl(var(--status-catchall-bg));
+    color: hsl(var(--status-catchall));
+    border: 1px solid hsl(var(--status-catchall-border));
+  }
+
+  /* Score color utilities */
+  .text-score-high {
+    color: hsl(var(--status-valid));
+  }
+
+  .text-score-medium {
+    color: hsl(var(--status-risky));
+  }
+
+  .text-score-low {
+    color: hsl(var(--status-invalid));
+  }
+
+  .bg-score-high {
+    background-color: hsl(var(--status-valid));
+  }
+
+  .bg-score-medium {
+    background-color: hsl(var(--status-risky));
+  }
+
+  .bg-score-low {
+    background-color: hsl(var(--status-invalid));
+  }
+}
