@@ -29,6 +29,17 @@ export function useAuth() {
     // DO NOT redirect here - let middleware handle route protection
 
     setIsLoading(false);
+
+    // Listen for credit updates from other components
+    const handleCreditsUpdate = () => {
+      const updatedUser = localStorage.getItem('user');
+      if (updatedUser) {
+        setUser(JSON.parse(updatedUser));
+      }
+    };
+
+    window.addEventListener('credits-updated', handleCreditsUpdate);
+    return () => window.removeEventListener('credits-updated', handleCreditsUpdate);
   }, [router]);
 
   const logout = () => {
@@ -46,6 +57,8 @@ export function useAuth() {
       const updatedUser = { ...user, creditsBalance: newBalance };
       setUser(updatedUser);
       localStorage.setItem('user', JSON.stringify(updatedUser));
+      // Notify other components about the credit update
+      window.dispatchEvent(new Event('credits-updated'));
     }
   };
 

@@ -177,25 +177,25 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Stats Section - White (Existing) */}
+      {/* Stats Section - White */}
       <section className="section-light py-16">
         <div className="container max-w-5xl mx-auto px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div className="text-center p-6">
-              <h3 className="text-4xl font-bold text-primary mb-2">99%</h3>
-              <p className="text-muted-foreground">Accuracy</p>
+              <h3 className="text-2xl font-bold text-primary mb-2 whitespace-nowrap">Accuracy</h3>
+              <p className="text-muted-foreground text-lg">99%</p>
             </div>
             <div className="text-center p-6">
-              <h3 className="text-4xl font-bold text-primary mb-2">Never Expire</h3>
-              <p className="text-muted-foreground">Lifetime Credits</p>
+              <h3 className="text-2xl font-bold text-primary mb-2 whitespace-nowrap">Lifetime Credits</h3>
+              <p className="text-muted-foreground text-lg">Never Expire</p>
             </div>
             <div className="text-center p-6">
-              <h3 className="text-4xl font-bold text-primary mb-2">&lt;300ms</h3>
-              <p className="text-muted-foreground">API Response</p>
+              <h3 className="text-2xl font-bold text-primary mb-2 whitespace-nowrap">API Response</h3>
+              <p className="text-muted-foreground text-lg">&lt;300ms</p>
             </div>
             <div className="text-center p-6">
-              <h3 className="text-4xl font-bold text-primary mb-2">Real-time</h3>
-              <p className="text-muted-foreground">Verification</p>
+              <h3 className="text-2xl font-bold text-primary mb-2 whitespace-nowrap">Verification</h3>
+              <p className="text-muted-foreground text-lg">Real-time</p>
             </div>
           </div>
         </div>

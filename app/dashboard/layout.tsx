@@ -58,12 +58,6 @@ export default function DashboardLayout({
               >
                 Billing
               </Link>
-              <Link
-                href="/docs/api"
-                className="text-sm font-medium text-white/70 transition-colors hover:text-primary"
-              >
-                API Docs
-              </Link>
 
               {/* ADMIN-ONLY Navigation */}
               {user?.role === 'ADMIN' && (

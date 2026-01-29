@@ -86,6 +86,9 @@ export default function DashboardPage() {
       setResult(data);
       setEmail(''); // Clear input
 
+      // Trigger history refresh to show latest verification
+      setHistoryKey(prev => prev + 1);
+
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred');
     } finally {
@@ -192,9 +195,6 @@ export default function DashboardPage() {
       {/* Welcome Section */}
       <div>
         <h1 className="text-3xl font-bold">Welcome back!</h1>
-        <p className="text-muted-foreground mt-2">
-          You have <span className="font-bold text-foreground">{user?.creditsBalance.toLocaleString()}</span> credits remaining
-        </p>
       </div>
 
       {/* Quick Actions */}
