@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { deductCredits } from '@/lib/credits';
-import { getBulkVerificationResults, normalizeReoonResponse } from '@/lib/reoon';
+import { verifySingleEmail, ReoonVerificationResult } from '@/lib/reoon';
 
-// Force dynamic rendering - don't pre-render during build
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // Allow up to 60 seconds for bulk verification polling
+export const maxDuration = 60;
+
+// How many emails to process per poll request
+const BATCH_SIZE = 5;
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { taskId: string } }
 ) {
   try {
-    // Get userId from middleware headers
     const userId = request.headers.get('x-user-id');
 
     if (!userId) {
@@ -22,21 +23,12 @@ export async function GET(
       );
     }
 
-    const taskId = parseInt(params.taskId);
+    const taskId = params.taskId;
 
-    if (isNaN(taskId)) {
-      return NextResponse.json(
-        { error: 'Invalid task ID' },
-        { status: 400 }
-      );
-    }
-
-    // Find verification record
+    // Find verification record by ID
     const verification = await prisma.verification.findFirst({
       where: {
-        resultsData: {
-          contains: `"taskId":${taskId}`,
-        },
+        id: taskId,
         userId,
       },
     });
@@ -51,9 +43,14 @@ export async function GET(
     // If already completed, return cached results
     if (verification.status === 'COMPLETED') {
       const cachedResults = verification.resultsData ? JSON.parse(verification.resultsData) : null;
+      const userBalance = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { creditsBalance: true },
+      });
+
       return NextResponse.json({
         status: 'completed',
-        results: cachedResults?.results || cachedResults || [],
+        results: cachedResults?.results || [],
         summary: {
           totalCount: verification.totalCount,
           validCount: verification.validCount,
@@ -63,129 +60,125 @@ export async function GET(
           catchallCount: verification.catchallCount,
         },
         creditsConsumed: verification.creditsConsumed,
-        newBalance: (await prisma.user.findUnique({
-          where: { id: userId },
-          select: { creditsBalance: true },
-        }))?.creditsBalance || 0,
+        newBalance: userBalance?.creditsBalance || 0,
         processingTimeSeconds: verification.processingTimeSeconds,
       });
     }
 
-    // Update status to PROCESSING if still PENDING
-    if (verification.status === 'PENDING') {
-      await prisma.verification.update({
-        where: { id: verification.id },
-        data: { status: 'PROCESSING' },
-      });
-    }
-
-    // Poll Reoon API for results
-    let reoonResults;
-    try {
-      console.log(`[BULK] Polling Reoon for task ${taskId}, verification ${verification.id}`);
-      reoonResults = await getBulkVerificationResults(taskId);
-      console.log(`[BULK] Reoon response: status=${reoonResults.status}, progress=${reoonResults.progress}, hasResults=${!!reoonResults.results}`);
-    } catch (error: any) {
-      console.error('[BULK] Reoon API error:', error?.message || error);
+    if (verification.status === 'FAILED') {
       return NextResponse.json(
-        { error: 'Failed to get verification results' },
+        { error: verification.errorMessage || 'Verification failed' },
         { status: 500 }
       );
     }
 
-    // If still running, return progress
-    if (reoonResults.status === 'waiting' || reoonResults.status === 'running') {
-      const progress = reoonResults.progress || 0;
-      const processedCount = Math.floor((progress / 100) * verification.totalCount);
+    // Parse current state
+    const state = JSON.parse(verification.resultsData || '{}');
+    const emails: string[] = state.emails || [];
+    const results: ReoonVerificationResult[] = state.results || [];
+    const processedCount = state.processedCount || 0;
 
-      return NextResponse.json({
-        status: 'running',
-        progress,
-        processedCount,
-        totalCount: verification.totalCount,
-      });
-    }
+    // If all emails are processed, finalize
+    if (processedCount >= emails.length) {
+      const creditsConsumed = results.filter((r: ReoonVerificationResult) => r.status !== 'unknown').length;
+      const processingTimeSeconds = (Date.now() - verification.createdAt.getTime()) / 1000;
 
-    // If failed, update record and return error
-    if (reoonResults.status === 'failed') {
+      const validCount = results.filter((r: ReoonVerificationResult) => r.status === 'valid').length;
+      const invalidCount = results.filter((r: ReoonVerificationResult) => r.status === 'invalid').length;
+      const riskyCount = results.filter((r: ReoonVerificationResult) => r.status === 'risky').length;
+      const unknownCount = results.filter((r: ReoonVerificationResult) => r.status === 'unknown').length;
+      const catchallCount = results.filter((r: ReoonVerificationResult) => r.status === 'catch_all').length;
+
+      // Deduct credits
+      const newBalance = await deductCredits(
+        userId,
+        creditsConsumed,
+        `Bulk email verification: ${verification.filename} (${creditsConsumed} emails)`,
+        verification.id
+      );
+
+      // Mark as completed
       await prisma.verification.update({
         where: { id: verification.id },
         data: {
-          status: 'FAILED',
-          errorMessage: 'Verification task failed',
+          status: 'COMPLETED',
+          validCount,
+          invalidCount,
+          riskyCount,
+          unknownCount,
+          catchallCount,
+          creditsConsumed,
+          resultsData: JSON.stringify({ results }),
+          completedAt: new Date(),
+          processingTimeSeconds,
         },
       });
 
-      return NextResponse.json(
-        { error: 'Verification task failed' },
-        { status: 500 }
-      );
+      return NextResponse.json({
+        status: 'completed',
+        results,
+        summary: { totalCount: emails.length, validCount, invalidCount, riskyCount, unknownCount, catchallCount },
+        creditsConsumed,
+        newBalance,
+        processingTimeSeconds,
+      });
     }
 
-    // Task completed - process results
-    console.log(`[BULK] Task ${taskId} completed! Processing results...`);
-    const rawResults = reoonResults.results
-      ? Object.values(reoonResults.results)
-      : [];
+    // Process next batch of emails
+    const batchEnd = Math.min(processedCount + BATCH_SIZE, emails.length);
+    console.log(`[BULK] Processing emails ${processedCount + 1}-${batchEnd} of ${emails.length}`);
 
-    // Normalize results to our format
-    const results = rawResults.map((r: any) => normalizeReoonResponse(r));
+    for (let i = processedCount; i < batchEnd; i++) {
+      try {
+        const result = await verifySingleEmail(emails[i]);
+        results.push(result);
+      } catch (error) {
+        console.error(`[BULK] Failed to verify ${emails[i]}:`, error);
+        results.push({
+          email: emails[i],
+          status: 'unknown',
+          score: 50,
+          details: { syntax: true, domain: false, mx: false, smtp: false, disposable: false, role: false, free_provider: false, accept_all: false },
+          metadata: { domain: emails[i].split('@')[1] || '' },
+        });
+      }
+    }
 
-    // Calculate counts
-    const validCount = results.filter(r => r.status === 'valid').length;
-    const invalidCount = results.filter(r => r.status === 'invalid').length;
-    const riskyCount = results.filter(r => r.status === 'risky').length;
-    const unknownCount = results.filter(r => r.status === 'unknown').length;
-    const catchallCount = results.filter(r => r.status === 'catch_all').length;
+    const newProcessedCount = batchEnd;
 
-    // Calculate credits consumed (unknown results are free)
-    const creditsConsumed = results.filter(r => r.status !== 'unknown').length;
+    // Update progress in DB
+    const validCount = results.filter((r: ReoonVerificationResult) => r.status === 'valid').length;
+    const invalidCount = results.filter((r: ReoonVerificationResult) => r.status === 'invalid').length;
+    const riskyCount = results.filter((r: ReoonVerificationResult) => r.status === 'risky').length;
+    const unknownCount = results.filter((r: ReoonVerificationResult) => r.status === 'unknown').length;
+    const catchallCount = results.filter((r: ReoonVerificationResult) => r.status === 'catch_all').length;
 
-    // Deduct credits
-    const newBalance = await deductCredits(
-      userId,
-      creditsConsumed,
-      `Bulk email verification: ${verification.filename} (${creditsConsumed} emails)`,
-      verification.id
-    );
-
-    // Calculate processing time
-    const processingTimeSeconds = (Date.now() - verification.createdAt.getTime()) / 1000;
-
-    // Update verification record
     await prisma.verification.update({
       where: { id: verification.id },
       data: {
-        status: 'COMPLETED',
+        resultsData: JSON.stringify({
+          emails,
+          results,
+          processedCount: newProcessedCount,
+        }),
         validCount,
         invalidCount,
         riskyCount,
         unknownCount,
         catchallCount,
-        creditsConsumed,
-        resultsData: JSON.stringify({ taskId, results }),
-        completedAt: new Date(),
-        processingTimeSeconds,
       },
     });
 
+    const progress = (newProcessedCount / emails.length) * 100;
+
     return NextResponse.json({
-      status: 'completed',
-      results,
-      summary: {
-        totalCount: verification.totalCount,
-        validCount,
-        invalidCount,
-        riskyCount,
-        unknownCount,
-        catchallCount,
-      },
-      creditsConsumed,
-      newBalance,
-      processingTimeSeconds,
+      status: 'running',
+      progress,
+      processedCount: newProcessedCount,
+      totalCount: emails.length,
     });
   } catch (error: any) {
-    console.error('[BULK] Polling error:', error?.message || error, error?.stack);
+    console.error('[BULK] Polling error:', error?.message || error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

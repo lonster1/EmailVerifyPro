@@ -1,8 +1,9 @@
 /**
- * Reoon Email Verification API Client (BULK API)
+ * Reoon Email Verification API Client
  *
- * IMPORTANT: This uses Reoon's bulk verification API.
- * Single email verification also uses the bulk API with 1 email.
+ * Uses Reoon's real-time single verification API (/verify/) for both
+ * single and bulk operations. This avoids the bulk task queue which
+ * requires instant credits and can delay processing indefinitely.
  *
  * API Documentation: https://reoon.com/email-verification-api-documentation
  */
@@ -33,7 +34,7 @@ export interface ReoonVerificationResult {
 interface ReoonAPIResponse {
   email: string;
   status: string;
-  overall_score: string; // STRING, 0-10 scale!
+  overall_score: number | string;
   is_valid_syntax: boolean | null;
   is_deliverable: boolean | null;
   is_disposable: boolean | null;
@@ -49,123 +50,6 @@ interface ReoonAPIResponse {
   mx_records: string[] | null;
   domain: string;
   username: string;
-}
-
-/**
- * Sleep helper for polling
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-/**
- * Create bulk verification task
- * API key must be in the REQUEST BODY, not headers!
- */
-export async function createBulkVerificationTask(
-  emails: string[]
-): Promise<{ taskId: number; status: string }> {
-  if (!REOON_API_KEY) {
-    throw new Error('REOON_API_KEY environment variable is not set');
-  }
-
-  if (!emails || emails.length === 0) {
-    throw new Error('At least one email address is required');
-  }
-
-  const response = await fetch(`${REOON_API_URL}/create-bulk-verification-task/`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      name: `Task ${Date.now()}`,
-      emails: emails,
-      key: REOON_API_KEY, // API key in BODY, not headers!
-    }),
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.json().catch(() => ({}));
-    throw new Error(`Reoon API error: ${errorBody.reason || response.statusText}`);
-  }
-
-  const data = await response.json();
-
-  if (data.status !== 'success') {
-    throw new Error(`Task creation failed: ${data.reason || 'Unknown error'}`);
-  }
-
-  return {
-    taskId: data.task_id,
-    status: data.status,
-  };
-}
-
-/**
- * Get bulk verification task results
- * API key must be in QUERY PARAMS, not headers!
- */
-export async function getBulkVerificationResults(taskId: number): Promise<{
-  status: 'waiting' | 'running' | 'completed' | 'failed';
-  progress: number;
-  results?: Record<string, ReoonAPIResponse>;
-}> {
-  if (!REOON_API_KEY) {
-    throw new Error('REOON_API_KEY environment variable is not set');
-  }
-
-  const url = `${REOON_API_URL}/get-result-bulk-verification-task/?key=${REOON_API_KEY}&task_id=${taskId}`;
-
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    throw new Error(`Failed to get results: ${response.statusText}`);
-  }
-
-  const data = await response.json();
-
-  if (data.status === 'error') {
-    throw new Error(data.reason || 'Unknown error');
-  }
-
-  return {
-    status: data.status,
-    progress: data.progress_percentage || 0,
-    results: data.results,
-  };
-}
-
-/**
- * Poll task until completed with exponential backoff
- */
-async function pollUntilComplete(
-  taskId: number,
-  maxWaitTime = 300000 // 5 minutes max
-): Promise<ReoonVerificationResult[]> {
-  const startTime = Date.now();
-  const delays = [1000, 2000, 3000, 5000, 10000]; // Exponential backoff
-
-  let delayIndex = 0;
-  while (Date.now() - startTime < maxWaitTime) {
-    const result = await getBulkVerificationResults(taskId);
-
-    if (result.status === 'completed' && result.results) {
-      // Convert results object to array
-      return Object.values(result.results).map(normalizeReoonResponse);
-    }
-
-    if (result.status === 'failed') {
-      throw new Error('Verification task failed');
-    }
-
-    // Still waiting/running - wait before next poll
-    const delay = delays[Math.min(delayIndex, delays.length - 1)];
-    await sleep(delay);
-    delayIndex++;
-  }
-
-  throw new Error('Verification task timeout');
 }
 
 /**
@@ -193,12 +77,18 @@ function mapReoonStatus(status: string): ReoonVerificationResult['status'] {
 
 /**
  * Normalize Reoon API response to our format
- * IMPORTANT: Score is a STRING 0-10, we convert to NUMBER 0-100
+ * Real-time API returns score as NUMBER 0-100
+ * Bulk API returns score as STRING 0-10
  */
 export function normalizeReoonResponse(data: ReoonAPIResponse): ReoonVerificationResult {
-  // Convert score from 0-10 string to 0-100 number
-  const scoreInt = parseInt(data.overall_score || '0');
-  const score = Math.min(100, Math.max(0, scoreInt * 10)); // Scale and clamp
+  let score: number;
+  if (typeof data.overall_score === 'string') {
+    // Bulk API: string 0-10 scale
+    score = Math.min(100, Math.max(0, parseInt(data.overall_score || '0') * 10));
+  } else {
+    // Real-time API: number 0-100 scale
+    score = Math.min(100, Math.max(0, data.overall_score || 0));
+  }
 
   return {
     email: data.email,
@@ -221,8 +111,8 @@ export function normalizeReoonResponse(data: ReoonAPIResponse): ReoonVerificatio
 }
 
 /**
- * Verify a single email address
- * Uses bulk API with 1 email for consistency
+ * Verify a single email using Reoon's real-time API
+ * Returns results in ~1-2 seconds, uses daily credits (no queuing)
  */
 export async function verifySingleEmail(email: string): Promise<ReoonVerificationResult> {
   if (!email || typeof email !== 'string') {
@@ -251,62 +141,74 @@ export async function verifySingleEmail(email: string): Promise<ReoonVerificatio
     };
   }
 
-  try {
-    // Create bulk task with single email
-    const task = await createBulkVerificationTask([normalizedEmail]);
-
-    // Poll for results
-    const results = await pollUntilComplete(task.taskId);
-
-    return results[0];
-  } catch (error) {
-    console.error('Single email verification error:', error);
-
-    // Return unknown status on error
-    return {
-      email: normalizedEmail,
-      status: 'unknown',
-      score: 50,
-      details: {
-        syntax: true,
-        domain: false,
-        mx: false,
-        smtp: false,
-        disposable: false,
-        role: false,
-        free_provider: false,
-        accept_all: false,
-      },
-      metadata: {
-        domain: normalizedEmail.split('@')[1] || '',
-      },
-    };
+  if (!REOON_API_KEY) {
+    throw new Error('REOON_API_KEY environment variable is not set');
   }
+
+  const url = `${REOON_API_URL}/verify/?key=${encodeURIComponent(REOON_API_KEY)}&email=${encodeURIComponent(normalizedEmail)}&mode=power`;
+
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Reoon API error: ${response.statusText}`);
+  }
+
+  const data: ReoonAPIResponse = await response.json();
+
+  if ((data as any).status === 'error') {
+    throw new Error((data as any).reason || 'Verification failed');
+  }
+
+  return normalizeReoonResponse(data);
 }
 
 /**
- * Verify multiple emails in bulk
+ * Verify multiple emails sequentially using real-time API
+ * Calls onProgress after each email completes
  */
-export async function verifyBulkEmails(
-  emails: string[]
+export async function verifyBulkEmailsRealtime(
+  emails: string[],
+  onProgress?: (processed: number, total: number, result: ReoonVerificationResult) => void
 ): Promise<ReoonVerificationResult[]> {
   if (!emails || emails.length === 0) {
     return [];
   }
 
-  // Normalize emails
-  const normalizedEmails = emails.map(e => e.trim().toLowerCase());
+  const results: ReoonVerificationResult[] = [];
 
-  try {
-    // Create bulk task
-    const task = await createBulkVerificationTask(normalizedEmails);
+  for (let i = 0; i < emails.length; i++) {
+    try {
+      const result = await verifySingleEmail(emails[i]);
+      results.push(result);
+    } catch (error) {
+      // On failure, mark as unknown and continue
+      console.error(`Failed to verify ${emails[i]}:`, error);
+      results.push({
+        email: emails[i],
+        status: 'unknown',
+        score: 50,
+        details: {
+          syntax: true,
+          domain: false,
+          mx: false,
+          smtp: false,
+          disposable: false,
+          role: false,
+          free_provider: false,
+          accept_all: false,
+        },
+        metadata: {
+          domain: emails[i].split('@')[1] || '',
+        },
+      });
+    }
 
-    // Poll for results
-    return await pollUntilComplete(task.taskId);
-  } catch (error) {
-    console.error('Bulk email verification error:', error);
-    throw error;
+    if (onProgress) {
+      onProgress(i + 1, emails.length, results[results.length - 1]);
+    }
   }
+
+  return results;
 }
 
 /**

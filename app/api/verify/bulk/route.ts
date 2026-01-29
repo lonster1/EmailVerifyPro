@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hasSufficientCredits } from '@/lib/credits';
-import { createBulkVerificationTask } from '@/lib/reoon';
 
 // Force dynamic rendering - don't pre-render during build
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    // Get userId from middleware headers
     const userId = request.headers.get('x-user-id');
 
     if (!userId) {
@@ -21,7 +19,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { emails, filename } = body;
 
-    // Validate request
     if (!emails || !Array.isArray(emails) || emails.length === 0) {
       return NextResponse.json(
         { error: 'Emails array is required and must not be empty' },
@@ -29,7 +26,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check max limit (50,000 emails per Reoon API)
     if (emails.length > 50000) {
       return NextResponse.json(
         { error: `Too many emails (${emails.length}). Maximum 50,000 per upload.` },
@@ -37,7 +33,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if user has sufficient credits
     const hasCredits = await hasSufficientCredits(userId, emails.length);
     if (!hasCredits) {
       return NextResponse.json(
@@ -46,25 +41,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Normalize emails (lowercase, trim)
-    const normalizedEmails = emails.map(email =>
+    const normalizedEmails = emails.map((email: string) =>
       typeof email === 'string' ? email.trim().toLowerCase() : ''
     ).filter(Boolean);
 
-    // Call Reoon API to create bulk verification task
-    let taskId: number;
-    try {
-      const result = await createBulkVerificationTask(normalizedEmails);
-      taskId = result.taskId;
-    } catch (error) {
-      console.error('Reoon API error:', error);
-      return NextResponse.json(
-        { error: 'Email verification service is unavailable. Please try again later.' },
-        { status: 503 }
-      );
-    }
-
-    // Create Verification record in database
+    // Create verification record - emails are processed incrementally via GET polling
     const verification = await prisma.verification.create({
       data: {
         userId,
@@ -77,17 +58,16 @@ export async function POST(request: NextRequest) {
         unknownCount: 0,
         catchallCount: 0,
         creditsConsumed: 0,
-        status: 'PENDING',
-        resultsData: JSON.stringify({ taskId, emails: normalizedEmails }),
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+        status: 'PROCESSING',
+        resultsData: JSON.stringify({ emails: normalizedEmails, results: [], processedCount: 0 }),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       },
     });
 
     return NextResponse.json({
       verificationId: verification.id,
-      taskId,
+      taskId: verification.id,
       totalEmails: normalizedEmails.length,
-      estimatedCredits: normalizedEmails.length,
       status: 'pending',
     });
   } catch (error) {
